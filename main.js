@@ -4,7 +4,7 @@ function roundNumber(num) {
         "UQd", "DQd", "TQd", "QaQd", "QtQd", "SxQd", "SpQd", "OcQd", "NnQd", "Qq", "UQq", "DQq", "TQq", "QaQq", "QtQq", "SxQq", "SpQq", "OcQq", "NnQq", "Sg"];
     for(var i = suffixes.length - 1; i >= 0; i--) {
         if (num >= Math.pow(10, 3 * i + 3) * 0.99999) {
-            return (Math.floor(num / Math.pow(10, 3 * i)) / 1000) + suffixes[i]
+            return (Math.floor(num / Math.pow(10, 3 * i + 1)) / 100) + suffixes[i]
         }
     }
     return Math.floor(num);
@@ -16,6 +16,14 @@ var UIValue = function (id, value) {
     this.value = value;
 };
 
+var Button = function(id) {
+    this.id = id;
+};
+
+Button.prototype.refresh = function(activated) {
+    $("#" + this.id).prop("disabled", !activated)
+};
+
 UIValue.prototype.refresh = function() {
     $("#" + this.id).html(roundNumber(this.value));
 };
@@ -25,29 +33,36 @@ var calculateGPS;
 var Unit = function(baseCost, costGrowth, baseGPS, id) {
     this.baseCost = baseCost;
     this.costGrowth = costGrowth;
-    this.baseGPS = baseGPS;
     this.amount = new UIValue("units"+id+"-amount", 0);
     this.cost = new UIValue("units"+id+"-cost", baseCost);
+    this.cost10 = new UIValue("units"+id+"-cost10", this.calculateCost(10));
+    this.cost100 = new UIValue("units"+id+"-cost100", this.calculateCost(100));
     this.unitGPS = new UIValue("units"+id+"-gps", baseGPS);
     this.totalGPS = new UIValue("units"+id+"-totalgps", 0);
-    this.buy1 = "units"+id+"-buy1";
-    this.buy10 = "units"+id+"-buy10";
-    this.buy100 = "units"+id+"-buy100";
-    this.buymax = "units"+id+"-buymax";
+    this.buy1 = new Button("units"+id+"-buy1");
+    this.buy10 = new Button("units"+id+"-buy10");
+    this.buy100 = new Button("units"+id+"-buy100");
+    this.buymax = new Button("units"+id+"-buymax");
+};
+
+Unit.prototype.calculateCost = function(amount) {
+    var calculating = 0;
+    var costPerUnit = this.cost.value;
+    for(var i = 0; i < amount; i++) {
+        calculating += costPerUnit;
+        costPerUnit*= this.costGrowth;
+    }
+    return calculating;
 };
 
 Unit.prototype.buy = function(amount) {
     this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
     if (amount >= 0) {
-        for(var x = 0; x < amount; x++) {
-            if(player.gold.value < this.cost.value) {
-                calculateGPS();
-                return;
-            }
-            player.gold.value -= this.cost.value;
-            this.amount.value++;
-            this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
-        }
+        var totalCost = this.calculateCost(amount);
+        if (player.gold.value < totalCost) return;
+        this.amount.value += amount;
+        player.gold.value -= totalCost;
+        this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
     } else {
         while(player.gold.value >= this.cost.value) {
             player.gold.value -= this.cost.value;
@@ -55,14 +70,22 @@ Unit.prototype.buy = function(amount) {
             this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
         }
     }
+    this.cost10.value = this.calculateCost(10);
+    this.cost100.value = this.calculateCost(100);
     calculateGPS();
 };
 
 Unit.prototype.refresh = function() {
     this.amount.refresh();
     this.cost.refresh();
+    this.cost10.refresh();
+    this.cost100.refresh();
     this.unitGPS.refresh();
     this.totalGPS.refresh();
+    this.buy1.refresh(player.gold.value >= this.cost.value);
+    this.buy10.refresh(player.gold.value >= this.cost10.value);
+    this.buy100.refresh(player.gold.value >= this.cost100.value);
+    this.buymax.refresh(player.gold.value >= this.cost.value);
 };
 
 Unit.prototype.calculateGPS = function() {
@@ -72,6 +95,8 @@ Unit.prototype.calculateGPS = function() {
 Unit.prototype.load = function(saveData) {
     this.amount.value = saveData.amount.value;
     this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
+    this.cost10.value = this.calculateCost(10);
+    this.cost100.value = this.calculateCost(100);
 };
 // Variaveis
 var player = {};
@@ -120,8 +145,8 @@ function loadGameAuto() {
 }
 
 function loadGame(saveData) {
-    player.gold.value = saveData.gold.value;
-    for (var x = 0; x < saveData.units.length; x++) {
+    if (saveData.gold) player.gold.value = saveData.gold.value;
+    if (saveData.units) for (var x = 0; x < saveData.units.length; x++) {
         player.units[x].load(saveData.units[x]);
     }
     calculateGPS();
@@ -133,10 +158,20 @@ function loadGame(saveData) {
 
 loadGameAuto();
 
+function hardReset() {
+    if(window.confirm("Are you sure?")) {
+        localStorage.removeItem('nethergame_save');
+        location.reload();
+    }
+}
+
 setInterval(function () {
     player.timeNow = Date.now();
     var interval = player.timeNow - player.lastTime;
     player.lastTime = Date.now();
-    localStorage['nethergame_save'] = btoa(JSON.stringify(player));
     gameLoop(interval);
 }, 1);
+
+setInterval(function () {
+    localStorage['nethergame_save'] = btoa(JSON.stringify(player));
+}, 2000);
