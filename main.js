@@ -66,8 +66,12 @@ Unit.prototype.refresh = function() {
 };
 
 Unit.prototype.calculateGPS = function() {
-    this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
     this.totalGPS.value = this.unitGPS.value * this.amount.value;
+};
+
+Unit.prototype.load = function(saveData) {
+    this.amount.value = saveData.amount.value;
+    this.cost.value = Math.floor(this.baseCost *  Math.pow(this.costGrowth, this.amount.value));
 };
 // Variaveis
 var player = {};
@@ -102,9 +106,32 @@ calculateGPS = function() {
 };
 
 function gameLoop(interval) {
-    player.gold.value+= player.gps.value/1000*interval;
+    var gainedThisLoop = player.gps.value/1000*interval;
+    player.gold.value+= gainedThisLoop;
     refreshScreen();
+    if (interval > 3 * 1000) window.alert("While offline you earned: " + roundNumber(gainedThisLoop));
 }
+
+
+function loadGameAuto() {
+    if (!localStorage['nethergame_save']) return;
+    var saveData = JSON.parse(atob(localStorage['nethergame_save']));
+    loadGame(saveData);
+}
+
+function loadGame(saveData) {
+    player.gold.value = saveData.gold.value;
+    for (var x = 0; x < saveData.units.length; x++) {
+        player.units[x].load(saveData.units[x]);
+    }
+    calculateGPS();
+    player.timeNow = Date.now();
+    var interval = player.timeNow - saveData.lastTime;
+    gameLoop(interval);
+    player.lastTime = player.timeNow;
+}
+
+loadGameAuto();
 
 setInterval(function () {
     player.timeNow = Date.now();
@@ -113,22 +140,3 @@ setInterval(function () {
     localStorage['nethergame_save'] = btoa(JSON.stringify(player));
     gameLoop(interval);
 }, 1);
-
-function loadGameAuto() {
-    if (!localStorage['nethergame_save']) return;
-    var save_data = JSON.parse(atob(localStorage['nethergame_save']));
-    loadGame(save_data);
-}
-
-function loadGame(save_data) {
-    player.gold = save_data.gold;
-    for (var x = 0; x < save_data.units.length; x++) {
-        player.units[x].load(save_data.units[x]);
-    }
-    calculateGPS();
-
-    player.timeNow = Date.now();
-    var interval = player.timeNow - save_data.lastTime;
-    gameloop(interval);
-    player.lastTime = player.timeNow;
-}
